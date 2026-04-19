@@ -1,75 +1,161 @@
-# LLM Wiki
+# LLM-WIKI-CORE.md
 
-A pattern for building personal knowledge bases using LLMs.
+## The Pattern: Persistent Knowledge
+The LLM-Wiki is a pattern for building a persistent, compounding knowledge base. Unlike standard RAG, which retrieves fragments on demand, this system incrementally builds a structured, interlinked collection of markdown files. The LLM maintains the synthesis, cross-references, and contradictions, ensuring the knowledge base grows in value with every new source.
 
-This is an idea file, it is designed to be copy pasted to your own LLM Agent (e.g. OpenAI Codex, Claude Code, OpenCode / Pi, or etc.). Its goal is to communicate the high level idea, but your agent will build out the specifics in collaboration with you.
+### Architecture
+1.  **Raw Sources**: Immutable source documents (Articles, papers, data). The source of truth.
+2.  **The Wiki**: A directory of LLM-generated markdown files (Summaries, entities, analyses). The agent's domain.
+3.  **The Schema**: This document (`CLAUDE.md` or `LLM-WIKI-CORE.md`). The configuration that defines structure and workflows.
 
-## The core idea
+## Agent Role & Responsibility
+You are the **Wiki Maintainer**. Your job is to:
+- **Ingest** sources and extract knowledge into structured wiki pages.
+- **Maintain** consistency, cross-references, and up-to-date content.
+- **Query** the wiki to synthesize answers (not re-deriving from scratch).
+- **Expand** the wiki by filing high-quality query results back into the system.
+- **Lint** the wiki for contradictions, stale content, and orphan pages.
 
-Most people's experience with LLMs and documents looks like RAG: you upload a collection of files, the LLM retrieves relevant chunks at query time, and generates an answer. This works, but the LLM is rediscovering knowledge from scratch on every question. There's no accumulation. Ask a subtle question that requires synthesizing five documents, and the LLM has to find and piece together the relevant fragments every time. Nothing is built up. NotebookLM, ChatGPT file uploads, and most RAG systems work this way.
+**Constraint**: You never modify files in `raw/`. You own everything in `wiki/`.
 
-The idea here is different. Instead of just retrieving from raw documents at query time, the LLM **incrementally builds and maintains a persistent wiki** — a structured, interlinked collection of markdown files that sits between you and the raw sources. When you add a new source, the LLM doesn't just index it for later retrieval. It reads it, extracts the key information, and integrates it into the existing wiki — updating entity pages, revising topic summaries, noting where new data contradicts old claims, strengthening or challenging the evolving synthesis. The knowledge is compiled once and then *kept current*, not re-derived on every query.
+## Directory Structure
+```
+raw/                    ← Immutable source documents (Read-only)
+wiki/
+  index.md              ← Master catalog of all wiki pages (Update on every ingest)
+  log.md                ← Append-only chronological activity log
+  overview.md           ← High-level synthesis of the full knowledge base
+  glossary.md           ← Living terminology, definitions, and style rules
+  sources/              ← One summary page per raw source
+  features/             ← One page per product feature
+  products/              ← One page per product or tool
+  personas/             ← One page per user persona or audience segment
+  concepts/             ← One page per core concept or domain idea
+  style/                ← Style rules, tone guidelines, naming conventions
+  analyses/             ← Comparison tables, gap analyses, research outputs
+```
 
-This is the key difference: **the wiki is a persistent, compounding artifact.** The cross-references are already there. The contradictions have already been flagged. The synthesis already reflects everything you've read. The wiki keeps getting richer with every source you add and every question you ask.
+## Entity Types
+| Type | Location | Purpose |
+|---|---|---|
+| **Source** | `wiki/sources/` | Summary of a raw document — key facts, quotes, metadata |
+| **Feature** | `wiki/features/` | A product feature: what it does, how it works |
+| **Product** | `wiki/products/` | A product or tool: overview, versions, related features |
+| **Persona** | `wiki/personas/` | A user type: goals, pain points, expertise level |
+| **Concept** | `wiki/concepts/` | A domain idea: definition, related terms, misconceptions |
+| **Style Rule** | `wiki/style/` | A writing convention: when to apply it, examples |
+| **Analysis** | `<u>wiki/analyses/</u>` | A synthesized output: comparison, gap analysis, outline |
 
-You never (or rarely) write the wiki yourself — the LLM writes and maintains all of it. You're in charge of sourcing, exploration, and asking the right questions. The LLM does all the grunt work — the summarizing, cross-referencing, filing, and bookkeeping that makes a knowledge base actually useful over time. In practice, I have the LLM agent open on one side and Obsidian open on the other. The LLM makes edits based on our conversation, and I browse the results in real time — following links, checking the graph view, reading the updated pages. Obsidian is the IDE; the LLM is the programmer; the wiki is the codebase.
+## Page Format & Conventions
+Every wiki page must have this YAML frontmatter:
+```yaml
+---
+title: <page title>
+type: source | feature | product | persona | concept | style | analysis
+created: YYYY-MM-DD
+updated: YYYY-MM-DD
+sources: [list of raw source filenames]
+tags: [relevant tags]
+---
+```
+**Structure**:
+1. **One-line summary** (used in `index.md`).
+2. **Body** — structured with headers, lists, and tables.
+3. **Related pages** section at the bottom — `[[wiki-page-name]]` links.
 
-This can apply to a lot of different contexts. A few examples:
+**Cross-Referencing**:
+- Always use `[[filename-without-extension]]` for internal links.
+- When creating/updating a page, scan relevant pages and add back-links.
 
-- **Personal**: tracking your own goals, health, psychology, self-improvement — filing journal entries, articles, podcast notes, and building up a structured picture of yourself over time.
-- **Research**: going deep on a topic over weeks or months — reading papers, articles, reports, and incrementally building a comprehensive wiki with an evolving thesis.
-- **Reading a book**: filing each chapter as you go, building out pages for characters, themes, plot threads, and how they connect. By the end you have a rich companion wiki. Think of fan wikis like [Tolkien Gateway](https://tolkiengateway.net/wiki/Main_Page) — thousands of interlinked pages covering characters, places, events, languages, built by a community of volunteers over years. You could build something like that personally as you read, with the LLM doing all the cross-referencing and maintenance.
-- **Business/team**: an internal wiki maintained by LLMs, fed by Slack threads, meeting transcripts, project documents, customer calls. Possibly with humans in the loop reviewing updates. The wiki stays current because the LLM does the maintenance that no one on the team wants to do.
-- **Competitive analysis, due diligence, trip planning, course notes, hobby deep-dives** — anything where you're accumulating knowledge over time and want it organized rather than scattered.
+## Workflows
 
-## Architecture
+### 1. Ingest
+When the user says "ingest [source]":
+1. Read the source file from `raw/`.
+2. Discuss key takeaways with the user (ask 1-3 clarifying questions).
+3. Create a summary page in `wiki/sources/` named after the source file.
+4. Identify and update affected existing wiki pages.
+5. Create new entity pages (feature, concept, etc.) as warranted.
+6. Update `wiki/glossary.md` and `wiki/index.md`.
+7. Append to `wiki/log.md`:
+   ```
+   ## [YYYY-MM-DD] ingest | <source title>
+   Pages created: ...
+   Pages updated: ...
+   Key additions: ...
+   ```
 
-There are three layers:
+### 2. Query
+When the user asks a question:
+1. Read `wiki/index.md` to identify relevant pages, then read those pages.
+2. Synthesize a clear answer with citations to wiki pages.
+3. Ask: "Should I file this answer as a wiki page?" If yes, save to `wiki/analyses/`.
+4. Append to `wiki/log.md`:
+   ```
+   ## [YYYY-MM-DD] query | <question summary>
+   Pages consulted: ...
+   Output filed: yes/no — <filename if yes>
+   ```
 
-**Raw sources** — your curated collection of source documents. Articles, papers, images, data files. These are immutable — the LLM reads from them but never modifies them. This is your source of truth.
+### 3. Lint
+When the user says "lint the wiki":
+1. Read all pages to find contradictions, stale claims, orphan pages, or missing links.
+2. Propose fixes and ask which ones to apply.
+3. Append to `wiki/log.md`:
+   ```
+   ## [YYYY-MM-DD] lint
+   Issues found: ...
+   Fixes applied: ...
+   ```
 
-**The wiki** — a directory of LLM-generated markdown files. Summaries, entity pages, concept pages, comparisons, an overview, a synthesis. The LLM owns this layer entirely. It creates pages, updates them when new sources arrive, maintains cross-references, and keeps everything consistent. You read it; the LLM writes it.
+## Operational Capabilities
+**Output Formats**:
+- **Markdown page** (Default)
+- **Comparison table** (Side-by-side feature/product comparisons)
+- **Doc outline** (H1/H2/H3 skeleton)
+- **Release notes draft** (From changelogs)
+- **Persona brief** (Structured audience summary)
 
-**The schema** — a document (e.g. CLAUDE.md for Claude Code or AGENTS.md for Codex) that tells the LLM how the wiki is structured, what the conventions are, and what workflows to follow when ingesting sources, answering questions, or maintaining the wiki. This is the key configuration file — it's what makes the LLM a disciplined wiki maintainer rather than a generic chatbot. You and the LLM co-evolve this over time as you figure out what works for your domain.
+**Indexing & Logging**:
+- `index.md`: A content-oriented catalog. The agent reads this first to find pages.
+- `log.md`: A chronological, append-only record of all activity.
 
-## Operations
+## Session Start Checklist
+At the start of every session:
+1. Read this file (`llm-wiki.md`).
+2. **Initialization**: (Automated) The Agent will present the available workflows (Ingest, Query, Lint) and wait for your command.
+3. **Orientation**: The Agent reads `wiki/index.md` to orient itself.
+4. **Context**: The Agent reads the last 5 entries in `wiki/log.md` to understand recent activity.
 
-**Ingest.** You drop a new source into the raw collection and tell the LLM to process it. An example flow: the LLM reads the source, discusses key takeaways with you, writes a summary page in the wiki, updates the index, updates relevant entity and concept pages across the wiki, and appends an entry to the log. A single source might touch 10-15 wiki pages. Personally I prefer to ingest sources one at a time and stay involved — I read the summaries, check the updates, and guide the LLM on what to emphasize. But you could also batch-ingest many sources at once with less supervision. It's up to you to develop the workflow that fits your style and document it in the schema for future sessions.
+## Operational Notes
+- **Never guess terminology** — always check `wiki/glossary.md` first.
+- **Flag contradictions** — if a source contradicts the wiki, flag it explicitly before updating.
+- **Prefer updates** — update existing pages over creating new ones when content fits.
+- **Consistency** — Keep page titles consistent with filenames (kebab-case).
 
-**Query.** You ask questions against the wiki. The LLM searches for relevant pages, reads them, and synthesizes an answer with citations. Answers can take different forms depending on the question — a markdown page, a comparison table, a slide deck (Marp), a chart (matplotlib), a canvas. The important insight: **good answers can be filed back into the wiki as new pages.** A comparison you asked for, an analysis, a connection you discovered — these are valuable and shouldn't disappear into chat history. This way your explorations compound in the knowledge base just like ingested sources do.
+# LLM-WIKI-CORE Workflow
 
-**Lint.** Periodically, ask the LLM to health-check the wiki. Look for: contradictions between pages, stale claims that newer sources have superseded, orphan pages with no inbound links, important concepts mentioned but lacking their own page, missing cross-references, data gaps that could be filled with a web search. The LLM is good at suggesting new questions to investigate and new sources to look for. This keeps the wiki healthy as it grows.
+The application follows a specific workflow for processing information:
 
-## Indexing and logging
-
-Two special files help the LLM (and you) navigate the wiki as it grows. They serve different purposes:
-
-**index.md** is content-oriented. It's a catalog of everything in the wiki — each page listed with a link, a one-line summary, and optionally metadata like date or source count. Organized by category (entities, concepts, sources, etc.). The LLM updates it on every ingest. When answering a query, the LLM reads the index first to find relevant pages, then drills into them. This works surprisingly well at moderate scale (~100 sources, ~hundreds of pages) and avoids the need for embedding-based RAG infrastructure.
-
-**log.md** is chronological. It's an append-only record of what happened and when — ingests, queries, lint passes. A useful tip: if each entry starts with a consistent prefix (e.g. `## [2026-04-02] ingest | Article Title`), the log becomes parseable with simple unix tools — `grep "^## \[" log.md | tail -5` gives you the last 5 entries. The log gives you a timeline of the wiki's evolution and helps the LLM understand what's been done recently.
-
-## Optional: CLI tools
-
-At some point you may want to build small tools that help the LLM operate on the wiki more efficiently. A search engine over the wiki pages is the most obvious one — at small scale the index file is enough, but as the wiki grows you want proper search. [qmd](https://github.com/tobi/qmd) is a good option: it's a local search engine for markdown files with hybrid BM25/vector search and LLM re-ranking, all on-device. It has both a CLI (so the LLM can shell out to it) and an MCP server (so the LLM can use it as a native tool). You could also build something simpler yourself — the LLM can help you vibe-code a naive search script as the need arises.
-
-## Tips and tricks
-
-- **Obsidian Web Clipper** is a browser extension that converts web articles to markdown. Very useful for quickly getting sources into your raw collection.
-- **Download images locally.** In Obsidian Settings → Files and links, set "Attachment folder path" to a fixed directory (e.g. `raw/assets/`). Then in Settings → Hotkeys, search for "Download" to find "Download attachments for current file" and bind it to a hotkey (e.g. Ctrl+Shift+D). After clipping an article, hit the hotkey and all images get downloaded to local disk. This is optional but useful — it lets the LLM view and reference images directly instead of relying on URLs that may break. Note that LLMs can't natively read markdown with inline images in one pass — the workaround is to have the LLM read the text first, then view some or all of the referenced images separately to gain additional context. It's a bit clunky but works well enough.
-- **Obsidian's graph view** is the best way to see the shape of your wiki — what's connected to what, which pages are hubs, which are orphans.
-- **Marp** is a markdown-based slide deck format. Obsidian has a plugin for it. Useful for generating presentations directly from wiki content.
-- **Dataview** is an Obsidian plugin that runs queries over page frontmatter. If your LLM adds YAML frontmatter to wiki pages (tags, dates, source counts), Dataview can generate dynamic tables and lists.
-- The wiki is just a git repo of markdown files. You get version history, branching, and collaboration for free.
-
-## Why this works
-
-The tedious part of maintaining a knowledge base is not the reading or the thinking — it's the bookkeeping. Updating cross-references, keeping summaries current, noting when new data contradicts old claims, maintaining consistency across dozens of pages. Humans abandon wikis because the maintenance burden grows faster than the value. LLMs don't get bored, don't forget to update a cross-reference, and can touch 15 files in one pass. The wiki stays maintained because the cost of maintenance is near zero.
-
-The human's job is to curate sources, direct the analysis, ask good questions, and think about what it all means. The LLM's job is everything else.
-
-The idea is related in spirit to Vannevar Bush's Memex (1945) — a personal, curated knowledge store with associative trails between documents. Bush's vision was closer to this than to what the web became: private, actively curated, with the connections between documents as valuable as the documents themselves. The part he couldn't solve was who does the maintenance. The LLM handles that.
+1. **Input**: The user provides a query or a task via the chat interface.
+2. **Agent Processing**:
+   - The Agent receives the input.
+   - The Agent analyzes the input and determines if any tools are required.
+   - The Agent selects the appropriate tool(s) from `tools.py`.
+   - The Agent executes the tool(s) and processes the output.
+3. **Output Generation**:
+   - The Agent formulates a final response based on the tool outputs and the original query.
+   - The response is displayed to the user in the chat interface.
+4. **Feedback Loop**:
+   - The user can provide feedback or follow-up questions, restarting the process from step 1.
 
 
-## Note
+## Usage (Human Guide)
+*Instructions for the user managing the ecosystem.*
 
-This document is intentionally abstract. It describes the idea, not a specific implementation. The exact directory structure, the schema conventions, the page formats, the tooling — all of that will depend on your domain, your preferences, and your LLM of choice. Everything mentioned above is optional and modular — pick what's useful, ignore what isn't. For example: your sources might be text-only, so you don't need image handling at all. Your wiki might be small enough that the index file is all you need, no search engine required. You might not care about slide decks and just want markdown pages. You might want a completely different set of output formats. The right way to use this is to share it with your LLM agent and work together to instantiate a version that fits your needs. The document's only job is to communicate the pattern. Your LLM can figure out the rest.
+- **Obsidian**: Use as your primary IDE for browsing the wiki.
+- **Web Clipping**: Use the **Obsidian Web Clipper** to move articles into `raw/`.
+- **Image Management**: Set Obsidian to "Download attachments" to a fixed folder (e.g., `raw/assets/`) so the agent can reference local images.
+- **Visualization**: Use **Obsidian's Graph View** to see the shape of your knowledge.
+- **Automation**: Use the **Dataview** plugin to generate dynamic tables from the agent's YAML frontmatter.
+- **Presentations**: Use the **Marp** plugin to turn wiki analyses into slide decks.

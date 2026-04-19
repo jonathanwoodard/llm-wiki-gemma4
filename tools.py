@@ -1,6 +1,5 @@
 import os
 import re
-import yaml
 import requests
 import datetime
 from bs4 import BeautifulSoup
@@ -9,23 +8,41 @@ from docling.document_converter import DocumentConverter
 # --- SECURITY LAYER ---
 
 def is_safe_path(target_path: str) -> bool:
+    """Ensures the target path is within the current working directory."""
     base_dir = os.path.realpath(os.getcwd())
-    target_dir = os.path.realpath(target_path)
     try:
+        target_dir = os.path.realpath(target_path)
         return os.path.commonpath([base_dir, target_dir]) == base_dir
     except ValueError:
         return False
 
-# --- NEW & UPDATED TOOLS ---
+# --- CORE TOOLS ---
 
-def read_file(path: str) -> str:
+def read_document(path: str) -> str:
+    """
+    Unified reader. 
+    If path is a PDF, uses docling to convert to Markdown.
+    Otherwise, reads as standard text.
+    """
     if not is_safe_path(path):
         return f"Error: Security Violation. Access to '{path}' is denied."
+    
+    if not os.path.exists(path):
+        return f"Error: File '{path}' not found."
+
     try:
-        with open(path, 'r', encoding='utf-8') as file:
-            return file.read()
+        ext = os.path.splitext(path)[1].lower()
+        
+        if ext == ".pdf":
+            # Use docling for complex PDF parsing
+            converter = DocumentConverter()
+            return converter.convert(path).document.export_to_markdown()
+        else:
+            # Standard text/markdown reading
+            with open(path, 'r', encoding='utf-8') as file:
+                return file.read()
     except Exception as e:
-        return f"Error: {str(e)}"
+        return f"Error processing document: {str(e)}"
 
 def write_file(path: str, content: str) -> str:
     if not is_safe_path(path):
@@ -49,7 +66,7 @@ def append_to_file(path: str, content: str) -> str:
         return "Error: Security Violation."
     try:
         with open(path, 'a', encoding='utf-8') as file:
-            file.write(f"\n{content}")
+            file.write(f"\n{content}" if os.path.getsize(path) > 0 else content)
         return f"Success: Content appended to {path}."
     except Exception as e:
         return f"Error: {str(e)}"
@@ -77,10 +94,10 @@ def get_file_metadata(path: str) -> str:
     if not is_safe_path(path):
         return "Error: Security Violation."
     try:
-        content = read_file(path)
+        # Using the unified reader
+        content = read_document(path)
         match = re.search(r'^---\s*(.*?)\s*---', content, re.DOTALL)
         if match:
-            # We return it as a string for the LLM to parse or view
             return match.group(1)
         return "No metadata found."
     except Exception as e:
@@ -95,29 +112,16 @@ def list_directory(path: str) -> str:
     except Exception as e:
         return f"Error: {str(e)}"
 
-def read_pdf(path: str) -> str:
-    if not is_safe_path(path):
-        return "Error: Security Violation."
-    try:
-        converter = DocumentConverter()
-        return converter.convert(path).document.export_to_markdown()
-    except Exception as e:
-        return f"Error: {str(e)}"
-
 def web_scrape(url: str) -> str:
     """Scrapes a URL and returns a simplified Markdown version of the text content."""
-    if not is_safe_path(url): # Note: In a real scenario, you'd use a URL validator, not is_safe_path
-        return "Error: Invalid URL."
     try:
         response = requests.get(url, timeout=10)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # Remove script and style elements
         for script in soup(["script", "style"]):
             script.decompose()
 
-        # Basic conversion: extract text and wrap in simple MD structure
         title = soup.title.string if soup.title else "No Title"
         paragraphs = [p.get_text() for p in soup.find_all('p')]
         content = f"# {title}\n\nSource: {url}\n\n" + "\n\n".join(paragraphs)
@@ -127,11 +131,10 @@ def web_scrape(url: str) -> str:
 
 def check_broken_links(root_dir: str = "wiki") -> str:
     """Scans all markdown files in the wiki for broken internal [[links]] or [links](path)."""
-    if not is_cap_safe_path(root_dir): # Assuming a helper for directory validation
+    if not is_safe_path(root_dir):
         return "Error: Security Violation."
     
     broken_links = []
-    # Regex to find [[Link]] or [Text](path.md)
     link_pattern = re.compile(r'\[\[(.*?)\]\]|\[.*?\]\((.*?\.md)\)')
 
     try:
@@ -143,15 +146,12 @@ def check_broken_links(root_dir: str = "wiki") -> str:
                         content = f.read()
                         matches = link_pattern.findall(content)
                         for match in matches:
-                            # match is a tuple (group1, group2) from the regex
                             link_target = match[0] if match[0] else match[1]
                             if not link_target: continue
                             
-                            # Check if the target file exists (handling relative paths)
-                            # This is a simplified check; real implementation needs path resolution
                             target_path = os.path.join(root, link_target)
                             if not os.path.exists(target_path):
-                                broken_links.append(f"Broken link in {path}: '{link_target}'")
+                               broken_links.append(f"Broken link in {path}: '{link_target}'")
         
         return "\n".join(broken_links) if broken_links else "No broken links found."
     except Exception as e:
@@ -213,33 +213,20 @@ def rebuild_wiki_index(index_path: str, root_dir: str = "wiki") -> str:
 
 # --- TEST SUITE ---
 if __name__ == "__main__":
-    # Create a dummy file for testing
-    test_file = "test_agent_file.txt"
-    with open(test_file, "w") as f:
-        f.write("Hello, this is a secure test.")
+    # Create a dummy text file for testing
+    test_text_file = "test_text.txt"
+    with open(test_text_file, "w") as f:
+        f.write("This is a plain text test.")
 
-    print("--- Testing Security (Path Traversal Attempt) ---")
-    print(f"Attempting to read /etc/passwd: {read_file('/etc/passwd')}")
+    print("--- Testing Unified Reader (Text) ---")
+    print(f"Content: {read_document(test_text_file)}")
+
+    print("\n--- Testing Security (Path Traversal Attempt) ---")
+    print(f"Attempting to read /etc/passwd: {read_document('/etc/passwd')}")
 
     print("\n--- Testing list_directory (CWD) ---")
     print(list_directory("."))
 
-    print("\n--- Testing write_file ---")
-    print(write_file("subfolder/new_test.txt", "Secure content."))
-
-    print("\n--- Testing read_file ---")
-    print(f"Content: {read_file(test_file)}")
-
     # Cleanup
-    if os.path.exists(test_file):
-        os.remove(test_file)
-
-
-
-
-
-
-
-
-
-
+    if os.path.exists(test_text_file):
+        os.remove(test_text_file)

@@ -3,7 +3,7 @@ import re
 import json
 import typer
 import ollama
-from typing import Dict, Any, List
+from typing import Dict, Any
 import tools 
 
 app = typer.Typer()
@@ -12,17 +12,20 @@ class AgentRunner:
     def __init__(self, model_name: str, max_cycles: int = 15):
         self.model_name = model_name
         self.max_cycles = max_cycles
-        self.context_files = ["AGENT_SCHEMA.md", "CLAUDE.md", "llm-wiki.md"]
+        self.context_files = ["AGENT_SCHEMA.md", "llm-wiki.md"]
         self.system_prompt = self._assemble_prompt()
         
         self.tool_registry: Dict[str, Any] = {
-            "read_file": tools.read_file,
+            "read_document": tools.read_document,
             "write_file": tools.write_file,
             "append_to_file": tools.append_to_file,
             "search_wiki": tools.search_wiki,
             "get_file_metadata": tools.get_file_metadata,
             "list_directory": tools.list_directory,
-            "read_pdf": tools.read_pdf
+            "web_scrape": tools.web_scrape,
+            "check_broken_links": tools.check_broken_links,
+            "find_orphan_pages": tools.find_orphan_pages,
+            "rebuild_index": tools.rebuild_wiki_index,
         }
 
     def _assemble_prompt(self) -> str:
@@ -97,5 +100,5 @@ if __name__ == "__main__":
     os.makedirs("wiki", exist_ok=True)
     os.makedirs("raw", exist_ok=True)
     
-    runner = AgentRunner(model_name="llama3") # Or your preferred local model
+    runner = AgentRunner(model_name="gemma4-stable") # Or your preferred local model
     runner.run_session()
