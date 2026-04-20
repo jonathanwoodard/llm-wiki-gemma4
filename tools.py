@@ -182,34 +182,29 @@ def find_orphan_pages(root_dir: str = "wiki") -> str:
         return f"Error finding orphans: {str(e)}"
 
 def rebuild_wiki_index(index_path: str, root_dir: str = "wiki") -> str:
-    """Automatically regenerates the index.md based on the current wiki structure."""
+    """Regenerates index.md with Obsidian-compatible Wikilinks."""
     if not is_safe_path(index_path):
         return "Error: Security Violation."
     
     try:
-        new_index = "# Wiki Index\n\nGenerated on: " + datetime.now().strftime("%Y-%m-%d %H:%M:%S") + "\n\n"
-        categories = {}
-
-        for root, _, files in os.walk(root_dir):
-            for file in files:
-                if file.endswith(".md") and file != os.path.basename(index_path):
-                    rel_path = os.path.relpath(os.path.join(root, file), root_dir)
-                    cat = os.path.dirname(rel_path).split(os.sep)[0] or "General"
-                    if cat not in categories: categories[cat] = []
-                    categories[cat].append(rel_path)
-
-        for cat, paths in categories.items():
-            new_index += f"## {cat.capitalize()}\n"
-            for p in paths:
-                new_index += f"- [[{p}]]\n"
-            new_index += "\n"
-
+        new_index = f"--- \ntitle: Wiki Index\nupdated: {datetime.now().strftime('%Y-%m-%d')}\n---\n\n# Wiki Index\n\n"
+        
+        for root, dirs, files in os.walk(root_dir):
+            # Filter for specific subdirectories to create sections
+            folder_name = os.path.basename(root)
+            if folder_name in ["sources", "concepts", "features", "products", "personas"]:
+                new_index += f"## {folder_name.capitalize()}\n"
+                for file in sorted(files):
+                    if file.endswith(".md"):
+                        name_no_ext = os.path.splitext(file)[0]
+                        new_index += f"- [[{name_no_ext}]]\n"
+                new_index += "\n"
+        
         with open(index_path, 'w', encoding='utf-8') as f:
             f.write(new_index)
-        return f"Success: {index_path} rebuilt."
+        return f"Success: {index_path} rebuilt for Obsidian."
     except Exception as e:
         return f"Error rebuilding index: {str(e)}"
-
 
 # --- TEST SUITE ---
 if __name__ == "__main__":

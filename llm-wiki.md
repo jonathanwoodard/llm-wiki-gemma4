@@ -78,31 +78,32 @@ Followed by:
 
 ## Workflows
 
-### Ingest
-
-When the user says "ingest [source]":
-
-1. Read the source file from `raw/`
-2. Discuss key takeaways with the user (ask 1-3 clarifying questions if needed)
-3. Create a summary page in `wiki/sources/` named after the source file
-4. Identify which existing wiki pages are affected — update them
-5. Create new entity pages (feature, concept, persona, etc.) as warranted
-6. Update `wiki/glossary.md` with any new or refined terms
-7. Update `wiki/index.md` — add new pages, update summaries of changed pages
-8. Update `wiki/overview.md` if the source shifts the big picture
-9. Append an entry to `wiki/log.md`:
-   ```
+### Ingest Workflow (Atomic Steps)
+Log entries for this workflow must contain the following content:
+```
    ## [YYYY-MM-DD] ingest | <source title>
    Pages created: ...
    Pages updated: ...
    Key additions: ...
-   ```
+```
+When the user says "ingest [source]", you MUST complete these steps in order:
+
+1. **Read & Extract**: Analyze the `raw/` source.
+2. **Draft Entities**: Create/Update pages in `wiki/sources/`, `wiki/concepts/`, etc.
+3. **Internal Linking**: Scan for existing pages to link via `[[kebab-case-link]]`.
+4. **Update Core Files**: 
+    - **Glossary**: Add new terms to `wiki/glossary.md`.
+    - **Log**: Append a formatted entry to `wiki/log.md`.
+
+    - **Overview**: Update `wiki/overview.md` if the source shifts the big picture.
+    - **Index**: Call the `rebuild_index` tool to ensure the Obsidian graph stays current.
+5. **Final Response**: Summarize all files changed.
 
 A single ingest may touch 5–15 wiki pages. That is expected.
 
-### Query
+### Query Workflow (Atomic Steps)
 
-When the user asks a question:
+When the user asks a question, you MUST complete these steps in order:
 
 1. Read `wiki/index.md` to identify relevant pages
 2. Read those pages
@@ -115,9 +116,9 @@ When the user asks a question:
    Output filed: yes/no — <filename if yes>
    ```
 
-### Lint
+### Lint Workflow (Atomic Steps)
 
-When the user says "lint the wiki":
+When the user says "lint the wiki", you MUST complete these steps in order:
 
 1. Read all pages in the wiki
 2. Report on:

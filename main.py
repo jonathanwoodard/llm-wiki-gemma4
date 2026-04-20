@@ -93,9 +93,18 @@ class AgentRunner:
     def execute_tool(self, action_name: str, tool_input: str) -> str:
         if action_name not in self.tool_registry:
             return f"Error: Tool '{action_name}' is not registered."
+        observation = ""
         try:
             params = json.loads(tool_input)
-            return self.tool_registry[action_name](**params)
+            observation = self.tool_registry[action_name](**params)
+            
+            # PROPOSED CHANGE: Auto-rebuild index after any wiki write
+            if action_name in ["write_file", "append_to_file"]:
+                if "wiki/" in params.get("path", ""):
+                    tools.rebuild_wiki_index("wiki/index.md", "wiki")
+                    observation += " (System Note: wiki/index.md was automatically rebuilt)"
+            
+            return observation
         except Exception as e:
             return f"Error: {str(e)}"
 
