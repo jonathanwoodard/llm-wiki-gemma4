@@ -76,6 +76,14 @@ Followed by:
 
 ---
 
+## Session Start Checklist
+1. **Tool Check**: Run `list_directory` on `wiki/` to ensure environment health.
+2. **Recent Context**: Read the last 5 lines of `wiki/log.md` to resume state.
+3. **Index Refresh**: Run `rebuild_index` to ensure Obsidian links are valid.
+4. **Greet**: Summarize current wiki status (e.g., "Wiki has 14 pages, last update was 2 hours ago").
+
+---
+
 ## Workflows
 
 ### Ingest Workflow (Atomic Steps)
@@ -166,14 +174,6 @@ Depending on the query, you may produce:
 
 Always ask the user which format they want if it's not clear.
 
----
-
-## Session Start Checklist
-At the start of every session:
-1. Read this file (LLM-WIKI.md)
-2. Read `wiki/index.md` to orient yourself. If this file is missing, prompt the user.
-3. Read the last 5 entries in `wiki/log.md` to understand recent activity. If this file is missing, prompt the user.
-4. Ask the user what they want to do: ingest, query, lint, or something else
 
 ---
 

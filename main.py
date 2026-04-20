@@ -9,7 +9,7 @@ import tools
 app = typer.Typer()
 
 class AgentRunner:
-    def __init__(self, model_name: str, max_cycles: int = 15):
+    def __init__(self, model_name: str, max_cycles: int = 35):
         self.model_name = model_name
         self.max_cycles = max_cycles
         self.current_cycle = 0
@@ -112,68 +112,51 @@ class AgentRunner:
         typer.echo(f"🚀 LLM-Wiki Engine Started [{self.model_name}]")
         messages = [{"role": "system", "content": self._get_current_turn_system_prompt()}]
 
+        # NEW: Automated Session Start
+        initial_prompt = "Execute the Session Start Checklist as defined in llm-wiki.md."
+        messages.append({"role": "user", "content": initial_prompt})
+
+        # Process the checklist automatically before entering the user loop
+        self._run_agent_loop(messages)
+
         try:
             while True:
                 user_input = typer.prompt("User")
                 if user_input.lower() in ["exit", "quit", "stop"]: 
-                    typer.echo("👋 Session terminated by user.")
                     break
-
+                
                 messages.append({"role": "user", "content": user_input})
-                
-                # Reset cycle and tool tracking for the new user command
-                self.current_cycle = 0
-                self.last_tool = None
-                self.consecutive_count = 0
-                
-                for _ in range(self.max_cycles):
-                    # Update system prompt with current cycle count
-                    messages[0] = {"role": "system", "content": self._get_current_turn_system_prompt()}
-
-                    response = ollama.chat(model=self.model_name, messages=messages)
-                    assistant_text = response['message']['content']
-                    messages.append({"role": "assistant", "content": assistant_text})
-                    
-                    parsed = self.parse_llm_output(assistant_text)
-
-                    if parsed.get("response"):
-                        typer.secho(f"\n[Agent]: {parsed['response']}", fg=typer.colors.GREEN)
-                        break
-
-                    if parsed.get("action") and parsed.get("input"):
-                        action = parsed["action"]
-                        
-                        # --- Tool Repetition Constraint Logic ---
-                        if action == self.last_tool:
-                            self.consecutive_count += 1
-                        else:
-                            self.last_tool = action
-                            self.consecutive_count = 1
-
-                        if self.consecutive_count > 10:
-                            confirm = typer.prompt(f"⚠️  Agent has used '{action}' twice consecutively. Continue? (y/n)")
-                            if confirm.lower() != 'y':
-                                typer.secho(f"🛑 User blocked repeated use of '{action}'. Stopping workflow.", fg=typer.colors.RED)
-                                break
-                        # ----------------------------------------
-
-                        typer.secho(f"🛠️  Action: {action}", fg=typer.colors.CYAN)
-                        
-                        observation = self.execute_tool(action, parsed["input"])
-                        self.current_cycle += 1
-                        typer.echo(f"👁️  Observation: {observation[:200]}...")
-                        
-                        messages.append({"role": "user", "content": f"Observation: {observation}"})
-                    else:
-                        typer.echo(f"\n[Agent]: {assistant_text}")
-                        break
-                        
-                    if self.current_cycle >= self.max_cycles:
-                        typer.secho("\n⚠️  ALERT: Action limit reached. The agent is forced to stop.", fg=typer.colors.RED)
-                        break
-        
+                self._run_agent_loop(messages)
         except KeyboardInterrupt:
-            typer.secho("\n\n🛑 Process interrupted by user (Ctrl+C). Exiting gracefully...", fg=typer.colors.RED, bold=True)
+            typer.secho("\n🛑 Session Ended.", fg=typer.colors.RED)
+
+    def _run_agent_loop(self, messages):
+        """Refactored logic to allow the agent to chain multiple actions autonomously."""
+        self.current_cycle = 0
+        for _ in range(self.max_cycles):
+            messages[0] = {"role": "system", "content": self._get_current_turn_system_prompt()}
+            response = ollama.chat(model=self.model_name, messages=messages)
+            assistant_text = response['message']['content']
+            messages.append({"role": "assistant", "content": assistant_text})
+            
+            parsed = self.parse_llm_output(assistant_text)
+
+            # If the agent is done and providing a final response to the user
+            if parsed.get("response"):
+                typer.secho(f"\n[Agent]: {parsed['response']}", fg=typer.colors.GREEN)
+                return 
+
+            # If the agent is performing an action
+            if parsed.get("action") and parsed.get("input"):
+                action = parsed["action"]
+                observation = self.execute_tool(action, parsed["input"])
+                self.current_cycle += 1
+                typer.echo(f"🛠️  Action: {action} | 👁️  Observation: {observation[:100]}...")
+                messages.append({"role": "user", "content": f"Observation: {observation}"})
+            
+            if self.current_cycle >= self.max_cycles:
+                typer.secho("\n⚠️ Action limit reached. Stopping for safety.", fg=typer.colors.RED)
+                break
 
 if __name__ == "__main__":
     # Ensure a basic wiki structure exists
