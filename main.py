@@ -12,9 +12,16 @@ class AgentRunner:
     def __init__(self, model_name: str, max_cycles: int = 15):
         self.model_name = model_name
         self.max_cycles = max_cycles
+        self.current_cycle = 0
+        self.last_tool = None
+        self.consecutive_count = 0
         self.context_files = ["AGENT_SCHEMA.md", "llm-wiki.md"]
-        self.system_prompt = self._assemble_prompt()
+        self.system_prompt_template = self._assemble_prompt_template()
         
+        # Ensure the base wiki directory exists before checking contents
+        os.makedirs("wiki", exist_ok=True)
+        self._ensure_wiki_structure()
+
         self.tool_registry: Dict[str, Any] = {
             "read_document": tools.read_document,
             "write_file": tools.write_file,
@@ -28,13 +35,47 @@ class AgentRunner:
             "rebuild_index": tools.rebuild_wiki_index,
         }
 
-    def _assemble_prompt(self) -> str:
+    def _ensure_wiki_structure(self):
+        """Checks for core wiki files, prompting user to create them if missing."""
+        core_files = [
+            "wiki/index.md",
+            "wiki/log.md",
+            "wiki/overview.md",
+            "wiki/glossary.md",
+            "wiki/bibliography.md"
+        ]
+
+        missing_files = [f for f in core_files if not os.path.exists(f)]
+
+        if not missing_files:
+            return
+
+        typer.secho("\n⚠️  Wiki Structure Warning: Missing core files.", fg=typer.colors.YELLOW)
+        
+        if typer.confirm("Would you like me to initialize the missing wiki components?"):
+            # Create files
+            for f in missing_files:
+                # Ensure parent dir exists (in case a file path was inside a missing dir)
+                os.makedirs(os.path.dirname(f), exist_ok=True)
+                with open(f, 'w', encoding='utf-8') as file:
+                    file.write("") # Create empty file
+                typer.echo(f"Created file: {f}")
+            
+            typer.secho("✅ Wiki structure initialized successfully.", fg=typer.colors.GREEN)
+        else:
+            typer.secho("❌ User declined initialization. Running in partial mode.", fg=typer.colors.RED)
+
+    def _assemble_prompt_template(self) -> str:
         combined_context = ["You are a Wiki Librarian. Follow the LLM-Wiki pattern: Thought/Action/Input/Observation/Response."]
         for file_path in self.context_files:
             if os.path.exists(file_path):
                 with open(file_path, 'r', encoding='utf-8') as f:
                     combined_context.append(f.read())
         return "\n\n".join(combined_context)
+
+    def _get_current_turn_system_prompt(self) -> str:
+        progress_info = f"\n\n[SYSTEM NOTICE: You have performed {self.current_cycle} actions this turn. You have {self.max_cycles - self.current_cycle} actions remaining before you must stop and check in with the user.]"
+        return self.system_prompt_template + progress_info
 
     def parse_llm_output(self, text: str) -> Dict[str, str]:
         patterns = {
@@ -60,40 +101,70 @@ class AgentRunner:
 
     def run_session(self):
         typer.echo(f"🚀 LLM-Wiki Engine Started [{self.model_name}]")
-        messages = [{"role": "system", "content": self.system_prompt}]
+        messages = [{"role": "system", "content": self._get_current_turn_system_prompt()}]
 
-        while True:
-            user_input = typer.prompt("User")
-            if user_input.lower() in ["exit", "quit"]: break
+        try:
+            while True:
+                user_input = typer.prompt("User")
+                if user_input.lower() in ["exit", "quit", "stop"]: 
+                    typer.echo("👋 Session terminated by user.")
+                    break
 
-            messages.append({"role": "user", "content": user_input})
-            
-            for _ in range(self.max_cycles):
-                response = ollama.chat(model=self.model_name, messages=messages)
-                assistant_text = response['message']['content']
-                messages.append({"role": "assistant", "content": assistant_text})
+                messages.append({"role": "user", "content": user_input})
                 
-                parsed = self.parse_llm_output(assistant_text)
+                # Reset cycle and tool tracking for the new user command
+                self.current_cycle = 0
+                self.last_tool = None
+                self.consecutive_count = 0
+                
+                for _ in range(self.max_cycles):
+                    # Update system prompt with current cycle count
+                    messages[0] = {"role": "system", "content": self._get_current_turn_system_prompt()}
 
-                # If the agent is done, show the final response to user
-                if parsed.get("response"):
-                    typer.secho(f"\n[Agent]: {parsed['response']}", fg=typer.colors.GREEN)
-                    break
+                    response = ollama.chat(model=self.model_name, messages=messages)
+                    assistant_text = response['message']['content']
+                    messages.append({"role": "assistant", "content": assistant_text})
+                    
+                    parsed = self.parse_llm_output(assistant_text)
 
-                # If the agent wants to take an action
-                if parsed.get("action") and parsed.get("input"):
-                    action = parsed["action"]
-                    typer.secho(f"🛠️  Action: {action}", fg=typer.colors.CYAN)
-                    
-                    observation = self.execute_tool(action, parsed["input"])
-                    typer.echo(f"👁️  Observation: {observation[:200]}...") # Truncate for terminal clarity
-                    
-                    # Feed the result back as a "user" role so the model processes the result
-                    messages.append({"role": "user", "content": f"Observation: {observation}"})
-                else:
-                    # Fallback if the LLM doesn't follow formatting strictly
-                    typer.echo(f"\n[Agent]: {assistant_text}")
-                    break
+                    if parsed.get("response"):
+                        typer.secho(f"\n[Agent]: {parsed['response']}", fg=typer.colors.GREEN)
+                        break
+
+                    if parsed.get("action") and parsed.get("input"):
+                        action = parsed["action"]
+                        
+                        # --- Tool Repetition Constraint Logic ---
+                        if action == self.last_tool:
+                            self.consecutive_count += 1
+                        else:
+                            self.last_tool = action
+                            self.consecutive_count = 1
+
+                        if self.consecutive_count > 10:
+                            confirm = typer.prompt(f"⚠️  Agent has used '{action}' twice consecutively. Continue? (y/n)")
+                            if confirm.lower() != 'y':
+                                typer.secho(f"🛑 User blocked repeated use of '{action}'. Stopping workflow.", fg=typer.colors.RED)
+                                break
+                        # ----------------------------------------
+
+                        typer.secho(f"🛠️  Action: {action}", fg=typer.colors.CYAN)
+                        
+                        observation = self.execute_tool(action, parsed["input"])
+                        self.current_cycle += 1
+                        typer.echo(f"👁️  Observation: {observation[:200]}...")
+                        
+                        messages.append({"role": "user", "content": f"Observation: {observation}"})
+                    else:
+                        typer.echo(f"\n[Agent]: {assistant_text}")
+                        break
+                        
+                    if self.current_cycle >= self.max_cycles:
+                        typer.secho("\n⚠️  ALERT: Action limit reached. The agent is forced to stop.", fg=typer.colors.RED)
+                        break
+        
+        except KeyboardInterrupt:
+            typer.secho("\n\n🛑 Process interrupted by user (Ctrl+C). Exiting gracefully...", fg=typer.colors.RED, bold=True)
 
 if __name__ == "__main__":
     # Ensure a basic wiki structure exists
