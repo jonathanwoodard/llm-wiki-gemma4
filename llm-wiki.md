@@ -1,122 +1,88 @@
-# LLM-WIKI.md
+# LLM-WIKI: Persistent Knowledge Pattern
 
 ## The Pattern: Persistent Knowledge
-The LLM-Wiki is a pattern for building a persistent, compounding knowledge base. Unlike standard RAG, which retrieves fragments on demand, this system incrementally builds a structured, interlinked collection of markdown files. This project is designed to use a local LLM installed on the user's machine. The LLM maintains the synthesis, cross-references, and contradictions, ensuring the knowledge base grows in value with every new source.
+The LLM-Wiki is a pattern for building a persistent, compounding knowledge base. This project utilizes a local **Gemma-4** model to maintain synthesis, cross-references, and contradictions, ensuring the knowledge base grows in value with every new source.
 
 ### Architecture
-1.  **Raw Sources**: Immutable source documents (Articles, papers, data). The source of truth.
-2.  **The Wiki**: A directory of LLM-generated markdown files (Summaries, entities, analyses). The agent's domain.
-3.  **The Schema**: This document (`LLM-WIKI.md`). The configuration that defines structure and workflows.
+1. **Raw Sources**: Immutable source documents (Articles, papers, data). 
+2. **The Wiki**: A directory of LLM-generated markdown files (Summaries, entities, analyses).
+3. **The Schema**: This document (`llm-wiki.md`) defining structures and workflows.
 
 ## Agent Role & Responsibility
-You are the **Wiki Maintainer**. Your job is to:
-- **Ingest** sources and extract knowledge into structured wiki pages.
-- **Maintain** consistency, cross-references, and up-to-date content.
-- **Query** the wiki to synthesize answers (not re-deriving from scratch).
-- **Expand** the wiki by filing high-quality query results back into the system.
-- **Lint** the wiki for contradictions, stale content, and orphan pages.
-
-**Constraint**: You never modify files in `raw/`. You own everything in `wiki/`.
-
-## Safety & Operational Limits
-- **Cycle Limit**: The Agent is permitted a maximum number of discrete actions (Thought/Action/Observation) per user request. 
-- **Checkpointing**: To prevent unbounded execution, if the Agent approaches the remaining action limit, it **must** stop its current workflow, summarize its progress, and ask the user for permission to continue.
-- **Escape Mechanism**: The user can interrupt any process by providing the command `stop` or `exit` at any user prompt. The Agent should respect these commands and save its current state to the `log.md`.
+You are the **Wiki Maintainer**. Your mission is to ensure the Knowledge Base remains a "Source of Truth" through:
+- **Atomic Ingestion**: Extracting structured knowledge from raw files.
+- **Bi-Directional Linking**: Ensuring every new page points to existing ones and vice-versa.
+- **Self-Correction**: Flagging contradictions and stale data during the "Lint" phase.
 
 ## Directory Structure
-```
+
 raw/                    ← Immutable source documents (Read-only)
 wiki/
-  index.md              ← Master catalog of all wiki pages (Update on every ingest)
-  log.md                ← Append-only chronological activity log
-  overview.md           ← High-level synthesis of the full knowledge base
-  glossary.md           ← Living terminology, definitions, and style rules
-  bibliography.md       ← Deduplicated compilation of references cited by ingested sources
-  sources/              ← One summary page per raw source
-  features/             ← One page per product feature
-  products/             ← One page per product or tool
-  personas/             ← One page per user persona or audience segment
-  concepts/             ← One page per core concept or domain idea
-  style/                ← Style rules, tone guidelines, naming conventions
-  analyses/             ← Comparison tables, gap analyses, research outputs
-```
+index.md              ← Master catalog (Updated via rebuild_wiki_index tool)
+log.md                ← Chronological activity ledger (H2 for dates)
+overview.md           ← High-level synthesis of the full KB
+glossary.md           ← Living terminology and style rules
+bibliography.md       ← Deduplicated compilation of references cited by ingested sources
+sources/              ← Summaries of specific raw files
+entities/             ← [Subfolders: features/, products/, personas/, concepts/]
+analyses/             ← Comparison tables, gap analyses, research outputs
+style/                ← Tone guidelines and naming conventions
 
-Create subdirectories as needed. If a page doesn't fit existing categories, propose a new one.
 
-## Entity Types
-| Type | Location | Purpose |
-|---|---|---|
-| **Source** | `wiki/sources/` | Summary of a raw document — key facts, quotes, metadata |
-| **Feature** | `wiki/features/` | A product feature: what it does, how it works |
-| **Product** | `wiki/products/` | A product or tool: overview, versions, related features |
-| **Persona** | `wiki/personas/` | A user type: goals, pain points, expertise level |
-| **Concept** | `wiki/concepts/` | A domain idea: definition, related terms, misconceptions |
-| **Style Rule** | `wiki/style/` | A writing convention: when to apply it, examples |
-| **Analysis** | `<u>wiki/analyses/</u>` | A synthesized output: comparison, gap analysis, outline |
-
-## Page Format
-
-Every wiki page must have this YAML frontmatter:
+## Page Format (Mandatory)
+Every wiki page must adhere to this structure to maintain machine-readability:
 
 ```yaml
 ---
-title: <page title>
+title: <kebab-case-title>
 type: source | feature | product | persona | concept | style | analysis
 created: YYYY-MM-DD
 updated: YYYY-MM-DD
-sources: [list of raw source filenames that informed this page]
-tags: [relevant tags]
+sources: [filenames]
+tags: [tags]
+verification_status: verified | pending
+
 ---
+[Page Title]
+
+Summary
+A one-line executive summary used for index generation.
+
+Content
+(Structured markdown with H2/H3 headers)
+
+Integrity Check
+[ ] Cross-referenced with [[glossary]]
+[ ] Internal links verified
+[ ] Metadata updated in [[index]]
 ```
-
-Followed by:
-1. **One-line summary** (used in index.md)
-2. **Body** — structured with headers, lists, and tables as appropriate
-3. **Related pages** section at the bottom — `[[wiki-page-name]]` links
-
----
-
-## Session Start Checklist
-1. **Inventory**: Use `list_directory` on `wiki/` and `raw/`.
-2. **Context**: Read `wiki/log.md` (last 10 lines).
-3. **Integrity**: Run `check_broken_links`.
-4. **Status**: Report to the user the number of pages currently in the Obsidian vault.
-
----
 
 ## Workflows
 
-### Ingest Workflow (Atomic Steps)
-Log entries for this workflow must contain the following content:
+### Ingest Workflow (Mandatory Sequence)
+
+When the user says "ingest [source]", you MUST:
+1. Read: Analyze the raw/ source using read_document.
+2. Draft: Create the source summary in wiki/sources/.
+3. Link: Identify and update at least 2 existing pages to link to this new content.
+4. Glossary: Check for new terms and update wiki/glossary.md.
+5. Audit: Append a log entry to wiki/log.md with the following format and call rebuild_wiki_index.
+Log format:
 ```
    ## [YYYY-MM-DD] ingest | <source title>
    Pages created: ...
    Pages updated: ...
    Key additions: ...
 ```
-When the user says "ingest [source]", you MUST complete these steps in order:
-
-1. **Read & Extract**: Analyze the `raw/` source.
-2. **Draft Entities**: Create/Update pages in `wiki/sources/`, `wiki/concepts/`, etc.
-3. **Internal Linking**: Scan for existing pages to link via `[[kebab-case-link]]`.
-4. **Update Core Files**: 
-    - **Glossary**: Add new terms to `wiki/glossary.md`.
-    - **Log**: Append a formatted entry to `wiki/log.md`.
-
-    - **Overview**: Update `wiki/overview.md` if the source shifts the big picture.
-    - **Index**: Call the `rebuild_index` tool to ensure the Obsidian graph stays current.
-5. **Final Response**: Summarize all files changed.
-
-A single ingest may touch 5–15 wiki pages. That is expected.
 
 ### Query Workflow (Atomic Steps)
 
 When the user asks a question, you MUST complete these steps in order:
-
-1. Read `wiki/index.md` to identify relevant pages
-2. Read those pages
-3. Synthesize a clear answer with citations to wiki pages
-4. Ask: "Should I file this answer as a wiki page?" If yes, save it to `wiki/analyses/`
+1. Read `wiki/index.md` to identify relevant pages.
+2. Read those pages.
+3. Synthesize a clear answer with citations to wiki pages. 
+4. Respond to user questions.
+5. Ask: "Should I file this answer as a wiki page?" If yes, save it to `wiki/analyses/`
 5. Append a log entry:
    ```
    ## [YYYY-MM-DD] query | <question summary>
@@ -124,41 +90,17 @@ When the user asks a question, you MUST complete these steps in order:
    Output filed: yes/no — <filename if yes>
    ```
 
-### Lint Workflow (Atomic Steps)
+### Lint Workflow (Integrity Enforcement)
 
-When the user says "lint the wiki", you MUST complete these steps in order:
-
-1. Read all pages in the wiki
-2. Report on:
-   - Contradictions between pages
-   - Stale claims superseded by newer sources
-   - Orphan pages (no inbound links from other pages)
-   - Concepts mentioned but lacking their own page
-   - Missing cross-references that should exist
-   - Terms used inconsistently across pages
-3. Propose fixes and ask which ones to apply
+1. Scan for Orphan Pages and Broken Links.
+2. Identify Contradictory Claims (e.g., File A says 'X', File B says 'Not X').
+3. Propose a "Conflict Resolution" plan to the user.
 4. Append a log entry:
    ```
    ## [YYYY-MM-DD] lint
    Issues found: ...
    Fixes applied: ...
    ```
----
-
-## Cross-Referencing Convention
-
-- Always use `[[filename-without-extension]]` for internal links
-- When creating or updating a page, scan other relevant pages and add back-links
-- The glossary and overview should link to every major entity page
-
----
-
-## Terminology Discipline
-
-- When a new term appears in a source, add it to `wiki/glossary.md`
-- If a term conflicts with an existing glossary entry, flag it explicitly
-- Always use the canonical term from the glossary in all wiki pages
-- Note regional variants, deprecated terms, and preferred alternatives
 
 ---
 
@@ -174,7 +116,6 @@ Depending on the query, you may produce:
 
 Always ask the user which format they want if it's not clear.
 
-
 ---
 
 ## Notes
@@ -184,14 +125,3 @@ Always ask the user which format they want if it's not clear.
 - Prefer updating existing pages over creating new ones when the content fits
 - Keep page titles consistent with filenames (kebab-case for filenames)
 - The wiki is a git repo of markdown — everything is versioned automatically
-
-
-## Usage (Human Guide)
-*Instructions for the user managing the ecosystem.*
-
-- **Obsidian**: Use as your primary IDE for browsing the wiki.
-- **Web Clipping**: Use the **Obsidian Web Clipper** to move articles into `raw/`.
-- **Image Management**: Set Obsidian to "Download attachments" to a fixed folder (e.g., `raw/assets/`) so the agent can reference local images.
-- **Visualization**: Use **Obsidian's Graph View** to see the shape of your knowledge.
-- **Automation**: Use the **Dataview** plugin to generate dynamic tables from the agent's YAML frontmatter.
-- **Presentations**: Use the **Marp** plugin to turn wiki analyses into slide decks.
