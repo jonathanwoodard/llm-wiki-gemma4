@@ -23,6 +23,10 @@ log.md                ← Chronological activity ledger (H2 for dates)
 overview.md           ← High-level synthesis of the full KB
 glossary.md           ← Living terminology and style rules
 bibliography.md       ← Deduplicated compilation of references cited by ingested sources
+assets/               ← NEW: Media storage for the wiki
+images/               ← .jpg, .png, .svg
+audio/                ← .mp3, .wav, .m4a
+video/                ← .mp4, .webm
 sources/              ← Summaries of specific raw files
 entities/             ← [Subfolders: features/, products/, personas/, concepts/]
 analyses/             ← Comparison tables, gap analyses, research outputs
