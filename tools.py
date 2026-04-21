@@ -1,5 +1,6 @@
 import os
 import re
+import shutil
 import requests
 import datetime
 from bs4 import BeautifulSoup
@@ -57,6 +58,20 @@ def write_file(path: str, content: str) -> str:
         with open(path, 'w', encoding='utf-8') as file:
             file.write(content)
         return f"Success: File {path} written."
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+def handle_media_ingest(source_path: str, target_dir: str) -> str:
+    """New tool to move non-text assets (images/audio) into the wiki structure."""
+    if not is_safe_path(source_path) or not is_safe_path(target_dir):
+        return "Error: Security Violation."
+    
+    try:
+        os.makedirs(target_dir, exist_ok=True)
+        filename = os.path.basename(source_path)
+        dest_path = os.path.join(target_dir, filename)
+        shutil.copy2(source_path, dest_path)
+        return f"Success: Media saved to {dest_path}"
     except Exception as e:
         return f"Error: {str(e)}"
 

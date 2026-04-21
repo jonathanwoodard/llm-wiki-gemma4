@@ -77,10 +77,10 @@ Followed by:
 ---
 
 ## Session Start Checklist
-1. **Tool Check**: Run `list_directory` on `wiki/` to ensure environment health.
-2. **Recent Context**: Read the last 5 lines of `wiki/log.md` to resume state.
-3. **Index Refresh**: Run `rebuild_index` to ensure Obsidian links are valid.
-4. **Greet**: Summarize current wiki status (e.g., "Wiki has 14 pages, last update was 2 hours ago").
+1. **Inventory**: Use `list_directory` on `wiki/` and `raw/`.
+2. **Context**: Read `wiki/log.md` (last 10 lines).
+3. **Integrity**: Run `check_broken_links`.
+4. **Status**: Report to the user the number of pages currently in the Obsidian vault.
 
 ---
 
