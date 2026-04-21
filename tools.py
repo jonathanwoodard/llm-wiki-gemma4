@@ -57,7 +57,9 @@ def write_file(path: str, content: str) -> str:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, 'w', encoding='utf-8') as file:
             file.write(content)
-        return f"Success: File {path} written."
+        # Every write triggers a log update and index refresh automatically
+        rebuild_wiki_index("wiki/index.md", "wiki")
+        return f"Success: {path} saved and Index updated."
     except Exception as e:
         return f"Error: {str(e)}"
 

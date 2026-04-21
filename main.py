@@ -25,6 +25,7 @@ class AgentRunner:
         self.tool_registry: Dict[str, Any] = {
             "read_document": tools.read_document,
             "write_file": tools.write_file,
+            "handle_media_ingest": tools.handle_media_ingest,
             "append_to_file": tools.append_to_file,
             "search_wiki": tools.search_wiki,
             "get_file_metadata": tools.get_file_metadata,
